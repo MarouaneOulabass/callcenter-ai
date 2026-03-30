@@ -1,9 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { generateEmbedding } from './embeddings';
 import { createServiceClient } from '@/lib/supabase/server';
 import type { Workspace } from '@/types';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const provider = process.env.AI_PROVIDER || 'gemini';
 
 interface RAGResult {
   reply: string;
@@ -69,22 +70,44 @@ ${toneMap[workspace.tone]}
 CONTEXTE:
 ${context || 'Aucune information disponible dans la base de connaissance.'}`;
 
-  const messages: Anthropic.MessageParam[] = [
-    ...conversationHistory.map(m => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    })),
-    { role: 'user', content: question },
-  ];
+  let reply = '';
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 1024,
-    system: systemPrompt,
-    messages,
-  });
+  if (provider === 'anthropic') {
+    // --- Claude (paid / production) ---
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const messages: Anthropic.MessageParam[] = [
+      ...conversationHistory.map(m => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
+      { role: 'user', content: question },
+    ];
 
-  const reply = response.content[0].type === 'text' ? response.content[0].text : '';
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages,
+    });
+
+    reply = response.content[0].type === 'text' ? response.content[0].text : '';
+  } else {
+    // --- Gemini (free / POC) ---
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!);
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      systemInstruction: systemPrompt,
+    });
+
+    const history = conversationHistory.map(m => ({
+      role: m.role === 'assistant' ? 'model' as const : 'user' as const,
+      parts: [{ text: m.content }],
+    }));
+
+    const chat = model.startChat({ history });
+    const result = await chat.sendMessage(question);
+    reply = result.response.text();
+  }
 
   // Check if this response also indicates lack of knowledge
   const isUnknown = reply.includes('je ne sais pas') ||
@@ -96,4 +119,23 @@ ${context || 'Aucune information disponible dans la base de connaissance.'}`;
   const escalated = isUnknown && recentUnknowns.length >= 1;
 
   return { reply, sources: [...new Set(sources)], escalated };
+}
+
+export async function summarizeTranscript(transcript: string): Promise<string> {
+  const prompt = `Résume cet appel téléphonique en 2-3 phrases:\n\n${transcript}`;
+
+  if (provider === 'anthropic') {
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 300,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    return response.content[0].type === 'text' ? response.content[0].text : '';
+  } else {
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const result = await model.generateContent(prompt);
+    return result.response.text();
+  }
 }

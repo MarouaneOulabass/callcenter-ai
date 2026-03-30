@@ -3,9 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { queryRAG } from '@/lib/rag/engine';
 import { v4 as uuidv4 } from 'uuid';
 import type { Workspace } from '@/types';
-import Anthropic from '@anthropic-ai/sdk';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { summarizeTranscript } from '@/lib/rag/engine';
 
 export async function POST(request: NextRequest) {
   try {
@@ -87,15 +85,7 @@ export async function POST(request: NextRequest) {
         // Generate summary
         let summary = '';
         if (transcript) {
-          const summaryResponse = await anthropic.messages.create({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 300,
-            messages: [{
-              role: 'user',
-              content: `Résume cet appel téléphonique en 2-3 phrases:\n\n${transcript}`,
-            }],
-          });
-          summary = summaryResponse.content[0].type === 'text' ? summaryResponse.content[0].text : '';
+          summary = await summarizeTranscript(transcript);
         }
 
         // Save conversation
