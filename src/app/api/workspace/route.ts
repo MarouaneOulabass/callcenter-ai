@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClientFromToken, extractToken, createServiceClient } from '@/lib/supabase/server';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const token = extractToken(request);
+    const supabase = await createClientFromToken(token);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -31,7 +32,8 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const token = extractToken(request);
+    const supabase = await createClientFromToken(token);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

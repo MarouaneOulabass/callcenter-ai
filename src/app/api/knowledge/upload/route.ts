@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { createClientFromToken, extractToken, createServiceClient } from '@/lib/supabase/server';
 import { ingestFile } from '@/lib/rag/ingest';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const token = extractToken(request);
+    const supabase = await createClientFromToken(token);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

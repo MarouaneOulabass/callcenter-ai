@@ -30,13 +30,13 @@ function getGemini() {
 }
 
 async function geminiEmbedding(text: string): Promise<number[]> {
-  const model = getGemini().getGenerativeModel({ model: 'text-embedding-004' });
+  const model = getGemini().getGenerativeModel({ model: 'gemini-embedding-001' });
   const result = await model.embedContent(text);
   return padOrTruncate(result.embedding.values, 1536);
 }
 
 async function geminiEmbeddings(texts: string[]): Promise<number[][]> {
-  const model = getGemini().getGenerativeModel({ model: 'text-embedding-004' });
+  const model = getGemini().getGenerativeModel({ model: 'gemini-embedding-001' });
   const results = await Promise.all(
     texts.map(text => model.embedContent(text))
   );

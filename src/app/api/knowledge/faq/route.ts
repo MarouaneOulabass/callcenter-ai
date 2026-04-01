@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClientFromToken, extractToken, createServiceClient } from '@/lib/supabase/server';
 import { ingestFAQ } from '@/lib/rag/ingest';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const token = extractToken(request);
+    const supabase = await createClientFromToken(token);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -57,7 +58,8 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const token = extractToken(request);
+    const supabase = await createClientFromToken(token);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -90,7 +92,8 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const token = extractToken(request);
+    const supabase = await createClientFromToken(token);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

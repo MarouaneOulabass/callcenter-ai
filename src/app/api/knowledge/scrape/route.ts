@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClientFromToken, extractToken, createServiceClient } from '@/lib/supabase/server';
 import { ingestWebPage } from '@/lib/rag/ingest';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
@@ -49,7 +49,8 @@ async function extractLinks(baseUrl: string, html: string): Promise<string[]> {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const token = extractToken(request);
+    const supabase = await createClientFromToken(token);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

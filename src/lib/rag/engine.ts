@@ -95,7 +95,7 @@ ${context || 'Aucune information disponible dans la base de connaissance.'}`;
     // --- Gemini (free / POC) ---
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!);
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       systemInstruction: systemPrompt,
     });
 
@@ -134,7 +134,7 @@ export async function summarizeTranscript(transcript: string): Promise<string> {
     return response.content[0].type === 'text' ? response.content[0].text : '';
   } else {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(prompt);
     return result.response.text();
   }
