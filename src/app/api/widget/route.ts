@@ -3,14 +3,25 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { queryRAG } from '@/lib/rag/engine';
 import { v4 as uuidv4 } from 'uuid';
 import type { Workspace } from '@/types';
+import { widgetRateLimit } from '@/lib/rate-limit';
+
+const MAX_MESSAGE_LENGTH = 5000;
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting
+    const rateLimitResponse = await widgetRateLimit(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const body = await request.json();
     const { message, conversation_id, token } = body;
 
     if (!message || !token) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    if (typeof message !== 'string' || message.length === 0 || message.length > MAX_MESSAGE_LENGTH) {
+      return NextResponse.json({ error: `Message must be between 1 and ${MAX_MESSAGE_LENGTH} characters` }, { status: 400 });
     }
 
     const supabase = await createServiceClient();

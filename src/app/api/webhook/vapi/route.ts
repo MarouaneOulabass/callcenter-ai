@@ -4,9 +4,13 @@ import { queryRAG } from '@/lib/rag/engine';
 import { v4 as uuidv4 } from 'uuid';
 import type { Workspace } from '@/types';
 import { summarizeTranscript } from '@/lib/rag/engine';
+import { webhookRateLimit } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await webhookRateLimit(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const body = await request.json();
     const { message } = body;
 

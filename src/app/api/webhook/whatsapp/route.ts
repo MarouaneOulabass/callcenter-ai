@@ -4,15 +4,21 @@ import { queryRAG } from '@/lib/rag/engine';
 import { sendWhatsAppMessage } from '@/lib/twilio/client';
 import { v4 as uuidv4 } from 'uuid';
 import type { Workspace } from '@/types';
+import { webhookRateLimit } from '@/lib/rate-limit';
+
+const MAX_MESSAGE_LENGTH = 5000;
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await webhookRateLimit(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const formData = await request.formData();
     const from = formData.get('From') as string;
     const body = formData.get('Body') as string;
     const to = formData.get('To') as string;
 
-    if (!from || !body) {
+    if (!from || !body || body.length === 0 || body.length > MAX_MESSAGE_LENGTH) {
       return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
         headers: { 'Content-Type': 'text/xml' },
       });

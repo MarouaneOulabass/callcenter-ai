@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClientFromToken, extractToken, createServiceClient } from '@/lib/supabase/server';
 import { ingestFile } from '@/lib/rag/ingest';
 import { v4 as uuidv4 } from 'uuid';
+import { uploadRateLimit } from '@/lib/rate-limit';
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await uploadRateLimit(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const token = extractToken(request);
     const supabase = await createClientFromToken(token);
     const { data: { user } } = await supabase.auth.getUser();
@@ -29,6 +35,10 @@ export async function POST(request: NextRequest) {
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: 'File too large (max 50MB)' }, { status: 413 });
     }
 
     const allowedTypes = [

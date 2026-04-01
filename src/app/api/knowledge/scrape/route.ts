@@ -72,6 +72,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'URL required' }, { status: 400 });
     }
 
+    try {
+      const parsedUrl = new URL(url);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        return NextResponse.json({ error: 'Invalid URL protocol' }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
+    }
+
     const sourceId = uuidv4();
 
     await serviceClient.from('knowledge_sources').insert({

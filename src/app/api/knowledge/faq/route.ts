@@ -106,17 +106,29 @@ export async function DELETE(request: NextRequest) {
 
     const serviceClient = await createServiceClient();
 
+    const { data: userData } = await serviceClient
+      .from('users')
+      .select('workspace_id')
+      .eq('id', user.id)
+      .single();
+
+    if (!userData) {
+      return NextResponse.json({ error: 'No workspace found' }, { status: 404 });
+    }
+
     // Delete chunks first
     await serviceClient
       .from('knowledge_chunks')
       .delete()
-      .eq('source_id', sourceId);
+      .eq('source_id', sourceId)
+      .eq('workspace_id', userData.workspace_id);
 
     // Delete source
     await serviceClient
       .from('knowledge_sources')
       .delete()
-      .eq('id', sourceId);
+      .eq('id', sourceId)
+      .eq('workspace_id', userData.workspace_id);
 
     return NextResponse.json({ success: true });
   } catch (error) {
