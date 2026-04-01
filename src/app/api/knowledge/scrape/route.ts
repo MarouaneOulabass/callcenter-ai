@@ -128,7 +128,10 @@ export async function POST(request: NextRequest) {
         console.error('Scrape error:', error);
         await serviceClient
           .from('knowledge_sources')
-          .update({ status: 'error' })
+          .update({
+            status: 'error',
+            metadata: { url, error: error instanceof Error ? error.message : 'Unknown error', failedAt: new Date().toISOString() }
+          })
           .eq('id', sourceId);
       }
     })();

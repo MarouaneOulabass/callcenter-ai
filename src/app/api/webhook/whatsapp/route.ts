@@ -5,6 +5,7 @@ import { sendWhatsAppMessage } from '@/lib/twilio/client';
 import { v4 as uuidv4 } from 'uuid';
 import type { Workspace } from '@/types';
 import { webhookRateLimit } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 
 const MAX_MESSAGE_LENGTH = 5000;
 
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
       headers: { 'Content-Type': 'text/xml' },
     });
   } catch (error) {
-    console.error('WhatsApp webhook error:', error);
+    logger.error('WhatsApp webhook error', { error: error instanceof Error ? error.message : String(error) });
     return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
       headers: { 'Content-Type': 'text/xml' },
     });

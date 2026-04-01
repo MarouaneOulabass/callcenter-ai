@@ -72,7 +72,10 @@ export async function ingestFile(
     console.error('Ingest error:', error);
     await supabase
       .from('knowledge_sources')
-      .update({ status: 'error' })
+      .update({
+        status: 'error',
+        metadata: { error: error instanceof Error ? error.message : 'Unknown error', failedAt: new Date().toISOString() }
+      })
       .eq('id', sourceId);
     throw error;
   }

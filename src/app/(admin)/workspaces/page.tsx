@@ -16,7 +16,8 @@ export default async function WorkspacesPage() {
   const { data: workspaces } = await supabase
     .from('workspaces')
     .select('*, users(count), conversations(count), knowledge_sources(count)')
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(100);
 
   return (
     <div className="space-y-6">

@@ -140,23 +140,45 @@ done
 # ------------------------------------------
 # TEST 10: List knowledge sources
 # ------------------------------------------
-test_case "List knowledge sources (expect 3)"
+test_case "List knowledge sources (expect 3, paginated)"
 SOURCES_RESPONSE=$(curl -s "$BASE_URL/api/knowledge" \
   -H "Authorization: Bearer $ACCESS_TOKEN")
 
+# Handle both paginated {data:[...]} and plain array [...] responses
 SOURCE_COUNT=$(echo "$SOURCES_RESPONSE" | grep -o '"id"' | wc -l)
+PAGINATION_CHECK=$(echo "$SOURCES_RESPONSE" | grep -o '"pagination"' | wc -l)
 
 if [ "$SOURCE_COUNT" -ge 3 ]; then
-  pass "Found $SOURCE_COUNT sources"
+  if [ "$PAGINATION_CHECK" -ge 1 ]; then
+    pass "Found $SOURCE_COUNT sources (paginated response)"
+  else
+    pass "Found $SOURCE_COUNT sources"
+  fi
 else
   fail "Expected 3+, got $SOURCE_COUNT. Response: $(echo $SOURCES_RESPONSE | head -c 200)"
 fi
 
 # ------------------------------------------
-# TEST 11: Widget config (public, no auth)
+# TEST 10b: Get widget token from workspace API
 # ------------------------------------------
-test_case "Widget config endpoint (public)"
-CONFIG_RESPONSE=$(curl -s "$BASE_URL/api/widget?token=$WORKSPACE_ID")
+test_case "Get widget token from workspace API"
+WS_TOKEN_RESPONSE=$(curl -s "$BASE_URL/api/workspace" \
+  -H "Authorization: Bearer $ACCESS_TOKEN")
+WIDGET_TOKEN=$(echo "$WS_TOKEN_RESPONSE" | grep -o '"widget_token":"[^"]*"' | cut -d'"' -f4)
+
+if [ -n "$WIDGET_TOKEN" ] && [ ${#WIDGET_TOKEN} -gt 10 ]; then
+  pass "Widget token obtained (${#WIDGET_TOKEN} chars)"
+else
+  fail "No widget token: $WS_TOKEN_RESPONSE"
+  # Fallback to workspace ID for backward compat
+  WIDGET_TOKEN="$WORKSPACE_ID"
+fi
+
+# ------------------------------------------
+# TEST 11: Widget config (public, with signed token)
+# ------------------------------------------
+test_case "Widget config endpoint (signed token)"
+CONFIG_RESPONSE=$(curl -s "$BASE_URL/api/widget?token=$WIDGET_TOKEN")
 CONFIG_NAME=$(echo "$CONFIG_RESPONSE" | grep -o '"name":"[^"]*"' | cut -d'"' -f4)
 
 if [ "$CONFIG_NAME" = "Maroc Digital SARL" ]; then
@@ -166,12 +188,24 @@ else
 fi
 
 # ------------------------------------------
+# TEST 11b: Widget rejects invalid token
+# ------------------------------------------
+test_case "Widget rejects invalid token"
+BAD_TOKEN_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/widget?token=fake-token-123")
+
+if [ "$BAD_TOKEN_RESPONSE" = "401" ]; then
+  pass "Invalid token correctly rejected (401)"
+else
+  fail "Expected 401, got $BAD_TOKEN_RESPONSE"
+fi
+
+# ------------------------------------------
 # TEST 12: Chat via widget — question with answer in KB
 # ------------------------------------------
 test_case "Widget chat — question about opening hours"
 CHAT1_RESPONSE=$(curl -s -X POST "$BASE_URL/api/widget" \
   -H "Content-Type: application/json" \
-  -d "{\"message\":\"Bonjour, quels sont vos horaires d'ouverture ?\",\"token\":\"$WORKSPACE_ID\"}")
+  -d "{\"message\":\"Bonjour, quels sont vos horaires d'ouverture ?\",\"token\":\"$WIDGET_TOKEN\"}")
 
 CHAT1_REPLY=$(echo "$CHAT1_RESPONSE" | grep -o '"reply":"' | head -1)
 CONV_ID=$(echo "$CHAT1_RESPONSE" | grep -o '"conversation_id":"[^"]*"' | cut -d'"' -f4)
@@ -191,7 +225,7 @@ fi
 test_case "Widget chat — follow-up in same conversation"
 CHAT2_RESPONSE=$(curl -s -X POST "$BASE_URL/api/widget" \
   -H "Content-Type: application/json" \
-  -d "{\"message\":\"Et comment je peux vous joindre par telephone ?\",\"conversation_id\":\"$CONV_ID\",\"token\":\"$WORKSPACE_ID\"}")
+  -d "{\"message\":\"Et comment je peux vous joindre par telephone ?\",\"conversation_id\":\"$CONV_ID\",\"token\":\"$WIDGET_TOKEN\"}")
 
 CHAT2_REPLY=$(echo "$CHAT2_RESPONSE" | grep -o '"reply":"' | head -1)
 CHAT2_CONV=$(echo "$CHAT2_RESPONSE" | grep -o '"conversation_id":"[^"]*"' | cut -d'"' -f4)
@@ -209,7 +243,7 @@ fi
 test_case "Widget chat — question outside KB (should admit not knowing)"
 CHAT3_RESPONSE=$(curl -s -X POST "$BASE_URL/api/widget" \
   -H "Content-Type: application/json" \
-  -d "{\"message\":\"Combien coute votre forfait premium entreprise ?\",\"token\":\"$WORKSPACE_ID\"}")
+  -d "{\"message\":\"Combien coute votre forfait premium entreprise ?\",\"token\":\"$WIDGET_TOKEN\"}")
 
 CHAT3_REPLY=$(echo "$CHAT3_RESPONSE" | grep -o '"reply":"' | head -1)
 
@@ -226,7 +260,7 @@ fi
 test_case "Widget chat — question about services (should use KB)"
 CHAT4_RESPONSE=$(curl -s -X POST "$BASE_URL/api/widget" \
   -H "Content-Type: application/json" \
-  -d "{\"message\":\"Quels sont les services que vous proposez ?\",\"token\":\"$WORKSPACE_ID\"}")
+  -d "{\"message\":\"Quels sont les services que vous proposez ?\",\"token\":\"$WIDGET_TOKEN\"}")
 
 CHAT4_REPLY=$(echo "$CHAT4_RESPONSE" | grep -o '"reply":"' | head -1)
 
@@ -356,6 +390,61 @@ if [ "$WA_STATUS" = "200" ]; then
   pass "WhatsApp webhook returns 200"
 else
   fail "WhatsApp webhook returned $WA_STATUS"
+fi
+
+# ------------------------------------------
+# SECURITY TESTS
+# ------------------------------------------
+test_case "SECURITY: /api/chat requires authentication"
+UNAUTH_CHAT=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/chat" \
+  -H "Content-Type: application/json" \
+  -d "{\"message\":\"test\",\"workspace_id\":\"$WORKSPACE_ID\"}")
+
+if [ "$UNAUTH_CHAT" = "401" ]; then
+  pass "Chat endpoint rejects unauthenticated requests"
+else
+  fail "Expected 401, got $UNAUTH_CHAT"
+fi
+
+test_case "SECURITY: Message length validation"
+LONG_MSG=$(python3 -c "print('A' * 6000)" 2>/dev/null || printf 'A%.0s' {1..6000})
+LONG_MSG_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/widget" \
+  -H "Content-Type: application/json" \
+  -d "{\"message\":\"$LONG_MSG\",\"token\":\"$WIDGET_TOKEN\"}")
+
+if [ "$LONG_MSG_RESPONSE" = "400" ]; then
+  pass "Oversized message rejected (400)"
+else
+  fail "Expected 400 for long message, got $LONG_MSG_RESPONSE"
+fi
+
+test_case "SECURITY: Rate limiting active"
+# Send 35 rapid requests to widget (limit is 30/min)
+RATE_LIMITED=0
+for i in $(seq 1 35); do
+  RL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/widget?token=$WIDGET_TOKEN")
+  if [ "$RL_STATUS" = "429" ]; then
+    RATE_LIMITED=1
+    break
+  fi
+done
+
+if [ "$RATE_LIMITED" = "1" ]; then
+  pass "Rate limiting triggered after rapid requests"
+else
+  fail "Rate limiting not triggered (expected 429)"
+fi
+
+test_case "SECURITY: URL validation in scraper"
+BAD_URL_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/knowledge/scrape" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -d "{\"url\":\"javascript:alert(1)\"}")
+
+if [ "$BAD_URL_RESPONSE" = "400" ]; then
+  pass "Invalid URL protocol rejected"
+else
+  fail "Expected 400 for javascript: URL, got $BAD_URL_RESPONSE"
 fi
 
 # ------------------------------------------

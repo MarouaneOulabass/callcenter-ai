@@ -26,7 +26,7 @@ export default function ConversationsPage() {
     const res = await fetch('/api/conversations');
     if (res.ok) {
       const data = await res.json();
-      setConversations(data);
+      setConversations(data.data);
     }
     setLoading(false);
   }

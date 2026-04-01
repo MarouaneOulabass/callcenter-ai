@@ -3,6 +3,7 @@ import { createClientFromToken, extractToken, createServiceClient } from '@/lib/
 import { ingestFile } from '@/lib/rag/ingest';
 import { v4 as uuidv4 } from 'uuid';
 import { uploadRateLimit } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ sourceId, status: 'pending' });
   } catch (error) {
-    console.error('Upload error:', error);
+    logger.error('Upload error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

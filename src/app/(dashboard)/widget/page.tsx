@@ -5,8 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import type { Workspace } from '@/types';
 
+type WorkspaceWithToken = Workspace & { widget_token?: string };
+
 export default function WidgetPage() {
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceWithToken | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -15,7 +17,7 @@ export default function WidgetPage() {
 
   const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const embedCode = workspace
-    ? `<script src="${appUrl}/widget.js" data-token="${workspace.id}" data-color="${workspace.primary_color}"></script>`
+    ? `<script src="${appUrl}/widget.js" data-token="${workspace.widget_token}" data-color="${workspace.primary_color}"></script>`
     : '';
 
   const handleCopy = () => {

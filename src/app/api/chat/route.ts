@@ -3,6 +3,7 @@ import { extractToken, createClientFromToken, createServiceClient } from '@/lib/
 import { queryRAG } from '@/lib/rag/engine';
 import { v4 as uuidv4 } from 'uuid';
 import type { Workspace, ChatRequest } from '@/types';
+import { logger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
       escalated: result.escalated,
     });
   } catch (error) {
-    console.error('Chat error:', error);
+    logger.error('Chat error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

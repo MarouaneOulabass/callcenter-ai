@@ -29,7 +29,8 @@ export default function KnowledgeBasePage() {
   async function loadSources() {
     const res = await fetch('/api/knowledge');
     if (res.ok) {
-      setSources(await res.json());
+      const data = await res.json();
+      setSources(data.data);
     }
     setLoading(false);
   }

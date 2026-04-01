@@ -10,6 +10,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10)));
+
     const serviceClient = await createServiceClient();
     const { data: userData } = await serviceClient
       .from('users')
@@ -21,14 +25,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'No workspace' }, { status: 404 });
     }
 
-    const { data: conversations } = await serviceClient
+    const { data: conversations, count } = await serviceClient
       .from('conversations')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('workspace_id', userData.workspace_id)
       .order('started_at', { ascending: false })
-      .limit(100);
+      .range((page - 1) * limit, page * limit - 1);
 
-    return NextResponse.json(conversations || []);
+    return NextResponse.json({
+      data: conversations || [],
+      pagination: { page, limit, total: count || 0 },
+    });
   } catch (error) {
     console.error('Conversations error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

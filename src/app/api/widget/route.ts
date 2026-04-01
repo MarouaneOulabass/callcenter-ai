@@ -4,6 +4,8 @@ import { queryRAG } from '@/lib/rag/engine';
 import { v4 as uuidv4 } from 'uuid';
 import type { Workspace } from '@/types';
 import { widgetRateLimit } from '@/lib/rate-limit';
+import { verifyWidgetToken } from '@/lib/widget-token';
+import { logger } from '@/lib/logger';
 
 const MAX_MESSAGE_LENGTH = 5000;
 
@@ -20,17 +22,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    const workspaceId = verifyWidgetToken(token);
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+    }
+
     if (typeof message !== 'string' || message.length === 0 || message.length > MAX_MESSAGE_LENGTH) {
       return NextResponse.json({ error: `Message must be between 1 and ${MAX_MESSAGE_LENGTH} characters` }, { status: 400 });
     }
 
     const supabase = await createServiceClient();
 
-    // Token = workspace ID for MVP simplicity
     const { data: workspace, error } = await supabase
       .from('workspaces')
       .select('*')
-      .eq('id', token)
+      .eq('id', workspaceId)
       .single();
 
     if (error || !workspace) {
@@ -95,13 +101,16 @@ export async function POST(request: NextRequest) {
       escalated: result.escalated,
     });
   } catch (error) {
-    console.error('Widget error:', error);
+    logger.error('Widget error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 // GET config for widget (colors, name, etc.)
 export async function GET(request: NextRequest) {
+  const rateLimitResponse = await widgetRateLimit(request);
+  if (rateLimitResponse) return rateLimitResponse;
+
   const { searchParams } = new URL(request.url);
   const token = searchParams.get('token');
 
@@ -109,11 +118,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Token required' }, { status: 400 });
   }
 
+  const workspaceId = verifyWidgetToken(token);
+  if (!workspaceId) {
+    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+  }
+
   const supabase = await createServiceClient();
   const { data: workspace } = await supabase
     .from('workspaces')
     .select('name, primary_color, language, logo_url')
-    .eq('id', token)
+    .eq('id', workspaceId)
     .single();
 
   if (!workspace) {

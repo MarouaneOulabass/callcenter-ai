@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClientFromToken, extractToken, createServiceClient } from '@/lib/supabase/server';
+import { generateWidgetToken } from '@/lib/widget-token';
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
       .eq('id', userData.workspace_id)
       .single();
 
-    return NextResponse.json(workspace);
+    return NextResponse.json({ ...workspace, widget_token: generateWidgetToken(workspace.id) });
   } catch (error) {
     console.error('Workspace error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

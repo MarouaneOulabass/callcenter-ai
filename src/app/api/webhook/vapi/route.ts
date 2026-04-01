@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Workspace } from '@/types';
 import { summarizeTranscript } from '@/lib/rag/engine';
 import { webhookRateLimit } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true });
     }
   } catch (error) {
-    console.error('Vapi webhook error:', error);
+    logger.error('Vapi webhook error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

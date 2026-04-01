@@ -38,37 +38,60 @@ export async function queryRAG(
   const context = chunks?.map((c: { content: string }) => c.content).join('\n\n---\n\n') || '';
   const sources: string[] = chunks?.map((c: { source_name: string }) => c.source_name) || [];
 
-  // Check for consecutive "don't know" responses (escalation logic)
-  const recentUnknowns = conversationHistory
-    .slice(-4)
-    .filter(m => m.role === 'assistant')
-    .filter(m =>
-      m.content.includes('je ne sais pas') ||
-      m.content.includes('I don\'t know') ||
-      m.content.includes('لا أعرف') ||
-      m.content.includes('pas en mesure')
-    );
+  // Escalation: if no relevant context was found, the agent is guessing
+  const hasRelevantContext = chunks && chunks.length > 0;
 
-  const toneMap = {
-    formal: 'Utilise un ton professionnel et formel.',
-    casual: 'Utilise un ton décontracté et amical.',
-    neutral: 'Utilise un ton neutre et clair.',
-  };
+  // Check conversation history for consecutive no-context responses
+  const recentMessages = conversationHistory.slice(-4);
+  const recentAssistantMsgs = recentMessages.filter(m => m.role === 'assistant');
 
-  const langMap = {
-    fr: 'français',
-    en: 'English',
-    ar: 'العربية',
-  };
-
-  const systemPrompt = `Tu es l'assistant support de ${workspace.name}.
+  const systemPrompts: Record<string, (name: string, tone: string, context: string) => string> = {
+    fr: (name, tone, context) => `Tu es l'assistant support de ${name}.
 Tu réponds uniquement sur la base des informations fournies dans le contexte ci-dessous.
 Si tu ne sais pas ou si l'information n'est pas dans le contexte, dis-le clairement et propose un transfert à un humain.
-Langue : ${langMap[workspace.language]}.
-${toneMap[workspace.tone]}
+${tone}
 
 CONTEXTE:
-${context || 'Aucune information disponible dans la base de connaissance.'}`;
+${context}`,
+    en: (name, tone, context) => `You are the support assistant for ${name}.
+You answer only based on the information provided in the context below.
+If you don't know or the information is not in the context, say so clearly and offer to transfer to a human.
+${tone}
+
+CONTEXT:
+${context}`,
+    ar: (name, tone, context) => `أنت مساعد الدعم لـ ${name}.
+أجب فقط بناءً على المعلومات المقدمة في السياق أدناه.
+إذا كنت لا تعرف أو المعلومة غير موجودة في السياق، قل ذلك بوضوح واقترح التحويل إلى إنسان.
+${tone}
+
+السياق:
+${context}`,
+  };
+
+  const toneDescriptions: Record<string, Record<string, string>> = {
+    fr: {
+      formal: 'Utilise un ton professionnel et formel.',
+      casual: 'Utilise un ton décontracté et amical.',
+      neutral: 'Utilise un ton neutre et clair.',
+    },
+    en: {
+      formal: 'Use a professional and formal tone.',
+      casual: 'Use a casual and friendly tone.',
+      neutral: 'Use a neutral and clear tone.',
+    },
+    ar: {
+      formal: 'استخدم نبرة مهنية ورسمية.',
+      casual: 'استخدم نبرة ودية وغير رسمية.',
+      neutral: 'استخدم نبرة محايدة وواضحة.',
+    },
+  };
+
+  const toneText = toneDescriptions[workspace.language]?.[workspace.tone]
+    || toneDescriptions['fr'][workspace.tone];
+  const buildPrompt = systemPrompts[workspace.language] || systemPrompts['fr'];
+  const contextText = context || (workspace.language === 'ar' ? 'لا توجد معلومات متاحة في قاعدة المعرفة.' : workspace.language === 'en' ? 'No information available in the knowledge base.' : 'Aucune information disponible dans la base de connaissance.');
+  const systemPrompt = buildPrompt(workspace.name, toneText, contextText);
 
   let reply = '';
 
@@ -109,14 +132,8 @@ ${context || 'Aucune information disponible dans la base de connaissance.'}`;
     reply = result.response.text();
   }
 
-  // Check if this response also indicates lack of knowledge
-  const isUnknown = reply.includes('je ne sais pas') ||
-    reply.includes('I don\'t know') ||
-    reply.includes('لا أعرف') ||
-    reply.includes('pas en mesure') ||
-    reply.includes('don\'t have information');
-
-  const escalated = isUnknown && recentUnknowns.length >= 1;
+  // If we have no context AND the previous response also had no context marker
+  const escalated = !hasRelevantContext && recentAssistantMsgs.length >= 2;
 
   return { reply, sources: [...new Set(sources)], escalated };
 }
